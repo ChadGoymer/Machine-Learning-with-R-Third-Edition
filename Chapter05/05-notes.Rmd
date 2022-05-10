@@ -1,0 +1,232 @@
+---
+title: "Divide & Conquer"
+output: html_document
+---
+
+# Decision Trees
+
+Decision tree learners are powerful classifiers, which utilize a tree structure to model the relationships among the features and the potential outcomes.
+
+The process begins at the **root node**, where it is then passed through **decision nodes** that require choices to be made based on the attributes. These choices split the data across **branches** that indicate potential outcomes of a decision. In the case a final decision can be made, the tree is terminated by **leaf nodes** (also known as **terminal nodes**) that denote the action to be taken as the result of the series of decisions.
+
+Decision trees are built using a heuristic called **recursive partitioning**. This approach splits the data into subsets, which are then split repeatedly into even smaller subsets, and so on until a stopping criterion is reached.
+
+## The C5.0 decision tree algorithm
+
++-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Strengths                                                                                                 | Weaknesses                                                                                      |
++===========================================================================================================+=================================================================================================+
+| An all-purpose classifier that does well on most problems                                                 | Decision tree models are often biased toward splits on features having a large number of levels |
+|                                                                                                           |                                                                                                 |
+| Highly automatic learning process, which can handle numeric or nominal features, as well as missing data  | It is easy to overfit or underfit the model                                                     |
++-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Excludes unimportant features                                                                             | Can have trouble modeling some relationships due to reliance on axis-parallel splits            |
++-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Can be used on both small and large datasets                                                              | Small changes in the training data can result in large changes to decision logic                |
++-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Results in a model that can be interpreted without a mathematical background (for relatively small trees) | Large trees can be difficult to interpret and the decisions they make may seem counterintuitive |
++-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| More efficient than other complex models                                                                  |                                                                                                 |
++-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+
+The degree to which a subset of examples contains only a single class is known as **purity**, and any subset composed of only a single class is called **pure**. C5.0 identifies the best split by minimising **entropy**, ultimately increasing homogeneity within the groups. The algorithm calculates the change in homogeneity that would result from a split on each possible feature, which is a measure known as **information gain**.
+
+The process of **pruning** a decision tree involves reducing its size such that it generalizes better to unseen data. The tree can be prevented from growing once it reaches a certain number of decisions or when the decision nodes contain only a small number of examples. This is called **early stopping** or **pre-pruning** the decision tree.
+
+## Example
+
+### Prepare Data
+
+```{r}
+library(tidyverse)
+
+credit <- read_csv("credit.csv") |> 
+  mutate(default = factor(default)) |> 
+  select(default, everything())
+
+table(credit$default) |> prop.table()
+```
+
+```{r}
+set.seed(123)
+
+train_sample <- sample(1000, 900)
+
+credit_train <- credit |> slice(train_sample)
+credit_test  <- credit |> slice(-train_sample)
+
+table(credit_train$default) |> prop.table()
+```
+
+### Applying Model
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+credit_spec <- 
+  decision_tree() |>  
+  set_mode("classification") |>  
+  set_engine("C5.0")
+
+credit_fit <- credit_spec  |> 
+  fit(default ~ ., data = credit_train)
+
+credit_fit
+```
+
+```{r}
+credit_pred <- credit_fit |> 
+  predict(credit_test) |> 
+  bind_cols(credit_test)
+
+credit_pred
+```
+
+```{r}
+credit_cm <- credit_pred |> conf_mat(default, .pred_class)
+autoplot(credit_cm, type = "heatmap")
+```
+
+### Boosting the Accuracy
+
+**Boosting** uses the notion that combining several learners with complementary strengths and weaknesses can dramatically improve the accuracy of a classifier. Boosting a decision tree simulates multiple trees and combines the results.
+
+```{r}
+credit_boost_spec <- 
+  decision_tree() |>  
+  set_mode("classification") |>  
+  set_engine("C5.0", trials = 10)
+
+credit_boost_fit <- credit_boost_spec  |> 
+  fit(default ~ ., data = credit_train)
+
+credit_boost_fit
+```
+
+```{r}
+credit_boost_pred <- credit_boost_fit |> 
+  predict(credit_test) |> 
+  bind_cols(credit_test)
+
+credit_boost_pred
+```
+
+```{r}
+credit_boost_cm <- credit_boost_pred |> conf_mat(default, .pred_class)
+autoplot(credit_boost_cm, type = "heatmap")
+```
+
+### Assigning Costs
+
+Some prediction mistakes are costlier than others. To discourage a tree from making more costly mistakes we can assign a penalty to different types of errors using a **cost matrix**.
+
+In the example below given a loan to someone who defaults is 4 times costlier that refusing a loan to someone who will not default.
+
+```{r}
+error_cost <- matrix(
+  c(0, 1, 4, 0), 
+  nrow = 2,
+  dimnames = list(predicted = c("no", "yes"), actual = c("no", "yes"))
+)
+
+error_cost
+```
+
+```{r}
+credit_cost_spec <- 
+  decision_tree() |>  
+  set_mode("classification") |>  
+  set_engine("C5.0", trials = 10, costs = error_cost)
+
+credit_cost_fit <- credit_cost_spec  |> 
+  fit(default ~ ., data = credit_train)
+
+credit_cost_fit
+```
+
+```{r}
+credit_cost_pred <- credit_cost_fit |> 
+  predict(credit_test) |> 
+  bind_cols(credit_test)
+
+credit_boost_pred
+```
+
+```{r}
+credit_cost_cm <- credit_cost_pred |> conf_mat(default, .pred_class)
+autoplot(credit_cost_cm, type = "heatmap")
+```
+
+# Rule Learners
+
+Classification rule learning algorithms utilize a heuristic known as **separate and conquer**. The process involves identifying a rule that covers a subset of examples in the training data, and then separating this partition from the remaining data.
+
+## The OneR Algorithm
+
+**ZeroR** is a rule learner that literally learns no rules (hence the name). For every unlabeled example, regardless of the values of its features, it predicts the most common class. The **OneR** algorithm improves over ZeroR by selecting a single rule.
+
+| Strengths                                                            | Weaknesses                 |
+|----------------------------------------------------------------------|----------------------------|
+| Generates a single, easy-to-understand, human-readable rule of thumb | Uses only a single feature |
+| Often performs surprisingly well                                     | Probably overly simplistic |
+| Can serve as a benchmark for more complex algorithms                 |                            |
+
+## The RIPPER algorithm
+
+**Repeated Incremental Pruning to Produce Error Reduction (RIPPER)** algorithm.
+
+| Strengths                                                          | Weaknesses                                                             |
+|--------------------------------------------------------------------|------------------------------------------------------------------------|
+| Generates easy-to-understand, human-readable rules                 | May result in rules that seem to defy common sense or expert knowledge |
+| Efficient on large and noisy datasets                              | Not ideal for working with numeric data                                |
+| Generally produces a simpler model than a comparable decision tree | Might not perform as well as more complex models                       |
+
+## Greedy Learners
+
+Decision trees and rule learners are known as **greedy learners** because they use data on a first-come, first-served basis. Both the divide and conquer heuristic used by decision trees and the separate and conquer heuristic used by rule learners attempt to make partitions one at a time, finding the most homogeneous partition first, followed by the next best, and so on, until all examples have been classified.
+
+## Example
+
+### Prepare Data
+
+```{r}
+mushrooms <- read_csv("mushrooms.csv")
+mushrooms
+```
+
+```{r}
+table(mushrooms$veil_type)
+
+mushrooms <- mushrooms |> 
+  select(-veil_type) |> 
+  mutate(across(everything(), as.factor))
+```
+
+### Analyse Data
+
+```{r}
+table(mushrooms$type)
+```
+
+### Apply Model
+
+```{r}
+library(RWeka)
+
+mushroom_1R <- OneR(type ~ ., data = mushrooms)
+mushroom_1R
+```
+
+```{r}
+summary(mushroom_1R)
+```
+
+```{r}
+mushroom_JRip <- JRip(type ~ ., data = mushrooms)
+mushroom_JRip
+```
+
+```{r}
+summary(mushroom_JRip)
+```
