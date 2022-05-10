@@ -1,0 +1,274 @@
+---
+title: "Forcasting Numeric Data"
+output: html_document
+---
+
+# Regression
+
+Regression is concerned with specifying the relationship between a single numeric **dependent variable** (the value to be predicted) and one or more numeric **independent variables** (the predictors).
+
+We'll focus only on the most basic **linear regression models**---those that use straight lines to measure the relationship between variables. When there is only a single independent variable it is known as **simple linear regression**. In the case of two or more independent variables, this is known as **multiple linear regression**.
+
+Regression can also be used for other types of dependent variables and even for some classification tasks. For instance, **logistic regression** is used to model a binary categorical outcome, while **Poisson regression** models integer count data. The method known as **multinomial logistic regression** models a categorical outcome; thus, it can be used for classification.
+
+## Simple linear regression
+
+A simple linear regression model defines the relationship between a dependent variable and a single independent predictor variable using a line defined by an equation in the following form:
+
+$$
+y = \alpha + \beta x
+$$
+
+**Ordinary least squares** is a method to minimise the errors (or **residuals**) between the observed values and the linear model using the sum of squares:
+
+$$
+\sum (y_i - \hat{y}_i)^2 = \sum e^2_i
+$$
+
+where $y_i$ are the actual values, $\hat{y}_i$ are the estimated values and $e_i$ are the errors. The solution can be obtained with the following equation:
+
+$$
+a = \bar{y} - b \bar{x}
+$$
+
+where $\bar{x}$ and $\bar{y}$ are the mean of $x$ and $y$ respectively. $b$ can be found by the following equation:
+
+$$
+b = \frac{\mathrm{Cov}(x, y)}{\mathrm{Var}(x)}
+$$
+
+## Correlations
+
+The **correlation** between two variables is a number that indicates how closely their relationship follows a straight line. It is calculated using:
+
+$$
+\rho_{x,y} = \mathrm{Corr}(x, y) = \frac{\mathrm{Cov}(x, y)}{\sigma_x \sigma_y}
+$$
+
+where $\sigma_x$ is the standard deviation of $x$.
+
+## Example
+
+```{r}
+library(tidyverse)
+
+launch <- read_csv("challenger.csv")
+launch
+```
+
+```{r}
+b <- cov(launch$temperature, launch$distress_ct) / var(launch$temperature)
+a <- mean(launch$distress_ct) - b * mean(launch$temperature)
+
+a
+b
+```
+
+```{r}
+cor(launch$temperature, launch$distress_ct)
+```
+
+## Multiple linear regression
+
+| Strengths                                                                                            | Weaknesses                                                                      |
+|----------------------------------------|--------------------------------|
+| By far the most common approach for modeling numeric data                                            | Makes strong assumptions about the data                                         |
+| Can be adapted to model almost any modeling task                                                     | The model's form must be specified by the user in advance                       |
+| Provides estimates of both the strength and size of the relationships among features and the outcome | Does not handle missing data                                                    |
+|                                                                                                      | Only works with numeric features, so categorical data requires extra processing |
+|                                                                                                      | Requires some knowledge of statistics to understand the model                   |
+
+Can be expressed with the following equation:
+
+$$
+y = \beta_0 x_0 + \beta_1 x_1 + \beta_2 x_2 + ... + \beta_n x_n + \varepsilon
+$$
+
+or in matrix notation:
+
+$$
+\boldsymbol{\mathrm{Y}} = \boldsymbol{\mathrm{\beta}} \boldsymbol{\mathrm{X}} + \boldsymbol{\mathrm{\varepsilon}}
+$$
+
+## Example
+
+### Prepare Data
+
+```{r}
+insurance <- read_csv("insurance.csv") |> 
+  mutate(across(where(is.character), as.factor))
+summary(insurance$expenses)
+```
+
+### Analyse Data
+
+```{r}
+ggplot(insurance) + geom_histogram(aes(expenses))
+```
+
+```{r}
+insurance |> 
+  select(age, bmi, children, expenses) |> 
+  cor()
+```
+
+```{r}
+library(GGally)
+
+insurance |> 
+  select(age, bmi, children, expenses) |> 
+  ggpairs()
+```
+
+### Apply model
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+ins_model_fit <- 
+  linear_reg() |> 
+  set_engine("lm") |> 
+  fit(expenses ~ ., data = insurance)
+
+ins_model_fit
+```
+
+### Evaluate Performance
+
+```{r}
+ins_model_fit |> 
+  extract_fit_engine() |> 
+  summary()
+```
+
+### Improving Performance
+
+```{r}
+insurance <- insurance |> 
+  mutate(age2 = age ^ 2, bmi30 = ifelse(bmi >= 30, 1, 0))
+
+insurance
+```
+
+```{r}
+ins_model2_fit <- 
+  linear_reg() |> 
+  set_engine("lm") |> 
+  fit(
+    expenses ~ age + age2 + children + bmi + sex + bmi30*smoker + region, 
+    data = insurance
+  )
+
+ins_model2_fit |> 
+  extract_fit_engine() |> 
+  summary()
+```
+
+## Regression Trees & Model Trees
+
+Trees for numeric prediction fall into two categories:
+
+1.  **Regression trees**, which make predictions based on the average value of examples that reach a leaf.
+2.  **Model trees**, which are grown in much the same way as regression trees, but at each leaf, a multiple linear regression model is built from the examples reaching that node.
+
+| Strengths                                                                                                   | Weaknesses                                                                          |
+|----------------------------------------|--------------------------------|
+| Combines the strengths of decision trees with the ability to model numeric data                             | Not as well-known as linear regression                                              |
+| Does not require the user to specify the model in advance                                                   | Requires a large amount of training data                                            |
+| Uses automatic feature selection, which allows the approach to be used with a very large number of features | Difficult to determine the overall net effect of individual features on the outcome |
+| May fit some types of data much better than linear regression                                               | Large trees can become more difficult to interpret than a regression model          |
+| Does not require knowledge of statistics to interpret the model                                             |                                                                                     |
+|                                                                                                             |                                                                                     |
+
+Trees for numeric prediction are built in much the same way as they are for classification. The data is partitioned using a divide-and-conquer strategy according to the feature that will result in the greatest increase in homogeneity in the outcome after a split is performed. For numeric decision trees, homogeneity is commonly measured by **Standard Deviation Reduction (SDR)**:
+
+$$
+\mathrm{SDR} = \mathrm{sd}(T) - \sum_i \frac{|T_i|}{|T|} \times \mathrm{sd}(T_i)
+$$
+
+where $\mathrm{sd}(T)$ refers to the standard deviation of the values in set $T$, while $T_1$, $T_2$, ..., $T_n$ are the sets of values resulting from a split on a feature. The $|T|$ term refers to the number of observations in set $T$. Essentially, the formula measures the reduction in standard deviation by comparing the standard deviation pre-split to the weighted standard deviation post-split.
+
+### Example
+
+### Prepare Data
+
+```{r}
+library(tidyverse)
+
+wine <- read_csv("whitewines.csv")
+wine
+```
+
+```{r}
+ggplot(wine) + geom_histogram(aes(quality))
+```
+
+```{r}
+wine_train <- slice(wine, 1:3750)
+wine_test  <- slice(wine, 3751:4898)
+```
+
+### Applying Model
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+wine_reg_spec <- 
+  decision_tree(tree_depth = 30) |> 
+  set_mode("regression") |> 
+  set_engine("rpart")
+
+wine_reg_fit <- wine_reg_spec |> 
+  fit(quality ~ ., data = wine_train)
+
+wine_reg_fit
+```
+
+```{r}
+library(rpart.plot)
+
+wine_reg_fit |> 
+  extract_fit_engine() |> 
+  rpart.plot(digits = 3)
+```
+
+```{r}
+wine_reg_pred <- wine_reg_fit |> 
+  predict(wine_test) |> 
+  bind_cols(wine_test) |> 
+  mutate(error = abs(.pred - quality), .before = 1)
+
+wine_reg_pred
+
+```
+
+```{r}
+cor(wine_reg_pred$.pred, wine_reg_pred$quality)
+
+ggplot(wine_reg_pred) + geom_histogram(aes(error))
+```
+
+### Improving Performance
+
+```{r}
+library(RWeka)
+
+wine_m5p_fit <- M5P(quality ~ ., data = wine_train)
+
+summary(wine_m5p_fit)
+```
+
+```{r}
+wine_m5p_pred <- wine_m5p_fit |> 
+  predict(wine_test) |> 
+  tibble() |> 
+  set_names(".pred") |> 
+  bind_cols(wine_test) |> 
+  mutate(error = abs(.pred - quality), .before = 1)
+
+cor(wine_m5p_pred$.pred, wine_m5p_pred$quality)
+
+ggplot(wine_m5p_pred) + geom_histogram(aes(error))
+```
