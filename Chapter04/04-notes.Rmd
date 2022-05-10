@@ -1,0 +1,169 @@
+---
+title: "Probabilistic Learning"
+output: html_document
+---
+
+# Naive Bayes
+
+**Bayesian methods** describe the probability of events, and how probabilities should be revised in the light of additional information.
+
+Classifiers based on Bayesian methods utilize training data to calculate an observed probability of each outcome based on the evidence provided by feature values.
+
+Bayesian probability theory is rooted in the idea that the estimated likelihood of an event, or a potential outcome, should be based on the evidence at hand across multiple trials, or opportunities for the event to occur.
+
+## Bayes Theorem
+
+For independent events $A$ and $B$, the probability of both happening can be expressed as $P(A \cap B) = P(A) * P(B)$.
+
+The relationships between dependent events can be described using **Bayes theorem**:
+
+$$
+P(A|B) = \frac{P(A ∩ B)}{P(B)}
+$$
+
+The notation $P(A|B)$ is read as the probability of event $A$, given that event $B$ occurred. This is known as **conditional probability**.
+
+## The Naive Bayes algorithm
+
+| **Strengths**                                                                                          | **Weaknesses**                                                                     |
+|--------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|
+| Simple, fast, and very effective                                                                       | Relies on an often-faulty assumption of equally important and independent features |
+| Does well with noisy and missing data                                                                  | Not ideal for datasets with many numeric features                                  |
+| Requires relatively few examples for training, but also works well with very large numbers of examples | Estimated probabilities are less reliable than the predicted classes               |
+| Easy to obtain the estimated probability for a prediction                                              |                                                                                    |
+
+If $A$ depends on a number of events we can replace $B$ with the intersection of these events, for example:
+
+$$
+P(A|B_1 \cap B_2 \cap B_3) = \frac{P(B_1 \cap B_2 \cap B_3|A) P(A)}{P(B_1 \cap B_2 \cap B_3)}
+$$
+
+Then if we assume the events are independent, this can simplify to:
+
+$$
+P(A|B_1 \cap B_2 \cap B_3) = \frac{P(B_1|A) P(B_2|A) P(B_3|A) P(A)}{P(B_1 \cap B_2 \cap B_3)}
+$$
+
+NOTE: if an event is not recorded in the training data the probability will be set to $0$. Since the probabilities are multiplied this gives an unrealistic answer. The approach to correct this is to add a **Laplace estimator** to the counts in the frequency table, usually $1$. Events not seen in the data then have a small probability of occurrence, rather than no chance.
+
+NOTE: The naive Bayes algorithm only works for categorical features. For numeric features, the usual approach is to split it into **bins**.
+
+## Example
+
+```{r}
+library(tidyverse)
+
+sms_raw <- read_csv("sms_spam.csv") |> 
+  mutate(type = factor(type))
+
+glimpse(sms_raw)
+
+table(sms_raw$type)
+```
+
+### Cleaning Data
+
+```{r}
+library(tidytext)
+library(SnowballC)
+
+sms_clean <- sms_raw |> 
+  rowid_to_column("text_id") |> 
+  unnest_tokens(word, text) |> 
+  filter(!str_detect(word, "[:digit:]")) |> 
+  anti_join(get_stopwords(), by = "word") |> 
+  mutate(word = wordStem(word)) |> 
+  filter(word != "")
+
+sms_freq_words <- sms_clean |> 
+  count(word, sort = TRUE) |> 
+  filter(n > 5) |> 
+  pull(word)
+
+sms_clean <- sms_clean |> 
+  filter(word %in% sms_freq_words)
+
+```
+
+### Analysing Data
+
+```{r}
+sms_spam_count <- sms_clean |> 
+  filter(type == "spam") |> 
+  count(word, sort = TRUE)
+
+sms_spam_count
+```
+
+```{r}
+sms_ham_count <- sms_clean |> 
+  filter(type == "ham") |> 
+  count(word, sort = TRUE)
+
+sms_ham_count
+```
+
+```{r}
+library(ggplot2)
+library(ggwordcloud)
+
+sms_spam_count |> 
+  slice(1:50) |> 
+  ggplot() + 
+  geom_text_wordcloud(aes(label = word, size = n)) +
+  scale_size_area(max_size = 20)
+```
+
+```{r}
+sms_ham_count |> 
+  slice(1:50) |> 
+  ggplot() + 
+  geom_text_wordcloud(aes(label = word, size = n)) +
+  scale_size_area(max_size = 20)
+```
+
+### Preparing Data
+
+```{r}
+sms_wide <- sms_clean |> 
+  mutate(occurance = "Yes") |> 
+  group_by(text_id, word) |> 
+  summarise(.type = first(type), occurance = first(occurance), .groups = "drop") |> 
+  pivot_wider(
+    names_from  = word, 
+    values_from = occurance, 
+    values_fill = "No"
+  ) |> 
+  select(-text_id)
+  
+sms_train <- slice(sms_wide, 1:4169)
+sms_test  <- slice(sms_wide, -(1:4169))
+
+```
+
+### Applying Model
+
+```{r}
+library(tidymodels)
+library(discrim)
+library(gmodels)
+tidymodels_prefer()
+
+sms_bayes_fit <- 
+  naive_Bayes(Laplace = 1) |> 
+  set_mode("classification") |> 
+  set_engine("naivebayes") |> 
+  fit(.type ~ ., data = sms_train)
+
+sms_pred <- sms_bayes_fit |> 
+  predict(sms_test) |> 
+  bind_cols(sms_test)
+
+CrossTable(
+  x = sms_pred$.pred_class,
+  y = sms_pred$.type, 
+  prop.chisq = FALSE, 
+  prop.t = FALSE,
+  dnn = c('predicted', 'actual')
+)
+```
