@@ -1,0 +1,197 @@
+---
+title: "Managing and Understanding Data"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+# Viewing Data
+
+```{r}
+usedcars <- read_csv("usedcars.csv")
+glimpse(usedcars)
+```
+
+```{r}
+view(usedcars)
+```
+
+# Statistics
+
+## Central tendency
+
+```{r}
+mean(usedcars$price)
+```
+
+```{r}
+median(usedcars$price)
+```
+
+## Spread
+
+```{r}
+min(usedcars$price)
+```
+
+```{r}
+max(usedcars$price)
+```
+
+```{r}
+range(usedcars$price)
+```
+
+```{r}
+var(usedcars$price)
+```
+
+```{r}
+sd(usedcars$price)
+```
+
+## Quantiles
+
+```{r}
+quantile(usedcars$price)
+```
+
+```{r}
+quantile(usedcars$price, probs = c(0.25, 0.75))
+```
+
+```{r}
+quantile(usedcars$price, probs = seq(0, 1, 0.2))
+```
+
+```{r}
+IQR(usedcars$price)
+```
+
+## Tables
+
+```{r}
+table(usedcars$year)
+```
+
+```{r}
+table(usedcars$model)
+```
+
+```{r}
+table(usedcars$color)
+```
+
+```{r}
+table(usedcars$transmission)
+```
+
+```{r}
+table(usedcars$year) |> prop.table() |> round(digits = 2)
+```
+
+```{r}
+table(usedcars$model) |> prop.table() |> round(digits = 2)
+```
+
+```{r}
+table(usedcars$color) |> prop.table() |> round(digits = 2)
+```
+
+```{r}
+table(usedcars$transmission) |> prop.table() |> round(digits = 2)
+```
+
+## Summary
+
+```{r}
+summary(usedcars)
+```
+
+# Visualisation
+
+## Numeric
+
+```{r}
+ggplot(usedcars) + geom_boxplot(aes(year))
+```
+
+```{r}
+ggplot(usedcars) + geom_boxplot(aes(price))
+```
+
+```{r}
+ggplot(usedcars) + geom_boxplot(aes(model, mileage))
+```
+
+```{r}
+ggplot(usedcars) + geom_histogram(aes(year))
+```
+
+```{r}
+ggplot(usedcars) + geom_histogram(aes(price))
+```
+
+```{r}
+ggplot(usedcars) + geom_histogram(aes(mileage))
+```
+
+## Categorical
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(year))
+```
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(model))
+```
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(color))
+```
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(transmission))
+```
+
+# Bivariate Relationships
+
+## Both numerical
+
+```{r}
+cor(x = usedcars$mileage, y = usedcars$price)
+```
+
+```{r}
+ggplot(usedcars) + geom_point(aes(x = mileage, y = price))
+```
+
+## Both categorical
+
+```{r}
+table(usedcars$model, usedcars$color)
+```
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(x = model, fill = color))
+```
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(x = color, fill = model), position = "fill")
+```
+
+```{r}
+ggplot(usedcars) + geom_bar(aes(x = color, fill = model), position = "dodge")
+```
+
+## Numerical vs categorical
+
+```{r}
+ggplot(usedcars) + geom_boxplot(aes(model, mileage))
+```
+
+```{r}
+ggplot(usedcars) + geom_histogram(aes(price)) + facet_wrap(vars(model))
+```
