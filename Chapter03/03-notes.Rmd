@@ -1,0 +1,160 @@
+---
+title: "Lazy Learning"
+output: html_document
+---
+
+# Nearest Neighbour Classification
+
+Nearest neighbour classifiers are defined by their characteristic of classifying unlabelled examples by assigning them the class of similar labelled examples.
+
+The k-NN algorithm gets its name from the fact that it uses information about an example's k-nearest neighbors to classify unlabeled examples. The letter $k$ is a variable term implying that any number of nearest neighbors could be used.
+
+## k-nearest neighbours algorithm (k-NN)
+
+| Strengths                                                   | Weaknesses                                                                                             |
+|-------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| Simple and effective                                        | Does not produce a model, limiting the ability to understand how the features are related to the class |
+| Makes no assumptions about the underlying data distribution | Requires selection of an appropriate k                                                                 |
+| Fast training phase                                         | Slow classification phase                                                                              |
+|                                                             | Nominal features and missing data require additional processing                                        |
+
+# Example
+
+## Cleaning Data
+
+```{r}
+library(tidyverse)
+
+wbcd <- read_csv("wisc_bc_data.csv") |> 
+  select(-id) |> 
+  mutate(diagnosis = factor(
+    diagnosis, 
+    levels = c("B", "M"), 
+    labels = c("Benign", "Malignant")
+  ))
+
+wbcd
+```
+
+## Analysing Data
+
+```{r}
+table(wbcd$diagnosis)
+```
+
+```{r}
+table(wbcd$diagnosis) |> prop.table() |> round(digits = 3) * 100
+```
+
+```{r}
+wbcd |> 
+  select(radius_mean, area_mean, smoothness_mean) |> 
+  summary()
+```
+
+## Preparing Data
+
+```{r}
+normalize <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+wbcd_norm <- wbcd |> 
+  mutate(across(where(is_double), normalize))
+
+wbcd_norm |> 
+  select(radius_mean, area_mean, smoothness_mean) |> 
+  summary()
+```
+
+```{r}
+wbcd_train <- slice(wbcd_norm, 1:469)
+wbcd_test  <- slice(wbcd_norm, -(1:469))
+```
+
+## Applying Model
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+
+knn_wbcd_spec <-
+  nearest_neighbor(neighbors = 21, weight_func = "rectangular") |> 
+  set_mode("classification") |> 
+  set_engine("kknn")
+
+knn_wbcd_spec
+```
+
+```{r}
+knn_wbcd_fit <- knn_wbcd_spec |> 
+  fit(diagnosis ~ ., data = wbcd_train)
+
+knn_wbcd_fit
+```
+
+```{r}
+wbcd_pred <- 
+  predict(knn_wbcd_fit, wbcd_test) |> 
+  bind_cols(wbcd_test)
+
+wbcd_pred
+```
+
+```{r}
+library(gmodels)
+
+CrossTable(x = wbcd_pred$diagnosis, y = wbcd_pred$.pred_class, prop.chisq = FALSE)
+```
+
+```{r}
+wbcd_z <- wbcd |> 
+  mutate(across(where(is_double), scale))
+
+wbcd_z |> 
+  select(radius_mean, area_mean, smoothness_mean) |> 
+  summary()
+```
+
+```{r}
+wbcd_train_z <- slice(wbcd_z, 1:469)
+wbcd_test_z  <- slice(wbcd_z, -(1:469))
+
+wbcd_pred_z <- knn_wbcd_spec |> 
+  fit(diagnosis ~ ., data = wbcd_train_z) |> 
+  predict(wbcd_test_z) |> 
+  bind_cols(wbcd_test_z)
+
+CrossTable(x = wbcd_pred_z$diagnosis, y = wbcd_pred_z$.pred_class, prop.chisq = FALSE)
+```
+
+## Tuning Model
+
+```{r}
+knn_wbcd_tune <-
+  nearest_neighbor(neighbors = tune(), weight_func = "rectangular") |> 
+  set_mode("classification")
+
+knn_wbcd_k <- map(1:30, function(k) {
+  print(str_c("k = ", k))
+  wbcd_pred <- knn_wbcd_tune |>   
+    set_args(neighbors = k) |> 
+    fit(diagnosis ~ ., data = wbcd_train) |> 
+    predict(wbcd_test)
+
+  CrossTable(x = wbcd_test$diagnosis, y = wbcd_pred$.pred_class, prop.chisq = FALSE) |> 
+    pluck("prop.tbl") |> 
+    as_tibble() |> 
+    mutate(k = k, .before = 1)
+}) |> 
+  bind_rows() |> 
+  filter(x != y) |> 
+  mutate(result = ifelse(
+    x == "Benign" & y == "Malignant", "false_positive", "false_negative"
+  )) |> 
+  pivot_wider(id_cols = k, names_from = result, values_from = n) |> 
+  mutate(false_total = false_negative + false_positive) |> 
+  arrange(false_total)
+
+knn_wbcd_k
+```
