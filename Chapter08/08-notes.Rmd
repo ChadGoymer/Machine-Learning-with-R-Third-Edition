@@ -1,0 +1,129 @@
+---
+title: "Finding Patterns"
+output: html_document
+---
+
+# Association Rules
+
+Recommending products based on analysis of retail behaviour is commonly known as **market basket analysis** due to the fact that it has been so frequently applied to supermarket data. However, the techniques can be applied in many scenarios.
+
+The building blocks of a market basket analysis are the items that may appear in any given transaction. An **itemset** is a group of one or more items, and a **transactions** are specified in terms of item sets. For example:
+
+$$
+\mathrm{\{bread,\ peanut\ butter,\ jelly\}}
+$$
+
+The result of a market basket analysis is a collection of **association rules** that specify patterns found in the relationships among items the itemsets. For example:
+
+$$
+\mathrm{\{peanut\ butter,\ jelly\}} \rightarrow \mathrm{\{bread\}}
+$$
+
+This association rule states that if peanut butter and jelly are purchased together, then bread is also likely to be purchased. In other words, "peanut butter and jelly imply bread."
+
+Because association rule learners are unsupervised, there is no need for the algorithm to be trained. The program is simply unleashed on a dataset in the hope that interesting associations are found. The downside is that there isn't an easy way to objectively measure the performance of a rule learner.
+
+## The Apriori algorithm
+
+Since the number of possible rules in a dataset may be huge, heuristic algorithms for reducing the number of itemsets to search have been developed. Perhaps the most-widely used approach for efficiently searching large databases for rules is known as **Apriori**.
+
+| Strengths                                                                  | Weaknesses                                                     |
+|----------------------------------------------------------------------------|----------------------------------------------------------------|
+| Is capable of working with large amounts of transactional data             | Not very helpful for small datasets                            |
+| Results in rules that are easy to understand                               | Requires effort to separate the true insight from common sense |
+| Useful for "data mining" and discovering unexpected knowledge in databases | Easy to draw spurious conclusions from random patterns         |
+
+The Apriori algorithm employs a simple a priori belief to reduce the association rule search space: all subsets of a frequent itemset must also be frequent. This heuristic is known as the **Apriori property**.
+
+Whether or not an association rule is deemed interesting is determined by two statistical measures: **support** and **confidence** measures. By providing minimum thresholds for each of these metrics, the number of rules reported is drastically limited.
+
+The **support** of an itemset or rule measures how frequently it occurs in the data. A function defining support for the itemset $X$ can be defined as follows:
+
+$$
+\mathrm{support}(X) = \frac{\mathrm{count}(X)}{N}
+$$
+
+where $N$ is the number of transactions in the database and $\mathrm{count}(X)$ is the number of transactions containing the itemset $X$.
+
+A rule's **confidence** is a measurement of its predictive power or accuracy. It is defined as the support of the itemset containing both X and Y divided by the support of the itemset containing only X:
+
+$$
+\mathrm{confidence}(X \rightarrow Y) = \frac{\mathrm{support}(X, Y)}{\mathrm{support}(X)}
+$$
+
+If a rule has both a high support and confidence it is called a **strong rule**.
+
+The actual process of creating rules occurs in two phases:
+
+1.  Identifying all the itemsets that meet a minimum support threshold.
+2.  Creating rules from these itemsets using those meeting a minimum confidence threshold.
+
+## Example
+
+### Prepare Data
+
+```{r}
+library(arules)
+
+groceries <- read.transactions("groceries.csv", sep = ",")
+summary(groceries)
+```
+
+```{r}
+itemFrequency(groceries[, 1:3])
+```
+
+```{r}
+itemFrequencyPlot(groceries, topN = 10)
+```
+
+```{r}
+image(sample(groceries, 100))
+```
+
+### Training the model
+
+```{r}
+groceryrules <- apriori(
+  groceries, 
+  parameter = list(support = 0.006, confidence = 0.25, minlen = 2)
+)
+
+groceryrules
+
+```
+
+## Evaluating the model
+
+```{r}
+summary(groceryrules)
+```
+
+The **lift** of a rule measures how much more likely one item or itemset is purchased relative to its typical rate of purchase, given that you know another item or itemset has been purchased. This is defined by the following equation:
+
+$$
+\mathrm{lift}(X \rightarrow Y) = \frac{\mathrm{confidence}(X \rightarrow Y)}{\mathrm{support}(Y)}
+$$
+
+```{r paged.print=FALSE}
+inspect(groceryrules[1:5])
+```
+
+A common approach is to take the association rules and divide them into the following three categories:
+
+-   **Actionable**: rules that provide a clear and useful insight
+
+-   **Trivial**: rules that are so obvious that they are not worth mentioning
+
+-   **Inexplicable**: Rules where the connection between the items is so unclear the are not useful
+
+### Improving model performance
+
+```{r paged.print=FALSE}
+inspect(sort(groceryrules, by = "lift")[1:10])
+```
+
+```{r paged.print=FALSE}
+berryrules <- subset(groceryrules, items %in% "berries")
+inspect(berryrules)
+```

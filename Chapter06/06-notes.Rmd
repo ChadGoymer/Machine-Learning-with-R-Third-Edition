@@ -71,7 +71,7 @@ cor(launch$temperature, launch$distress_ct)
 ## Multiple linear regression
 
 | Strengths                                                                                            | Weaknesses                                                                      |
-|----------------------------------------|--------------------------------|
+|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
 | By far the most common approach for modeling numeric data                                            | Makes strong assumptions about the data                                         |
 | Can be adapted to model almost any modeling task                                                     | The model's form must be specified by the user in advance                       |
 | Provides estimates of both the strength and size of the relationships among features and the outcome | Does not handle missing data                                                    |
@@ -173,7 +173,7 @@ Trees for numeric prediction fall into two categories:
 2.  **Model trees**, which are grown in much the same way as regression trees, but at each leaf, a multiple linear regression model is built from the examples reaching that node.
 
 | Strengths                                                                                                   | Weaknesses                                                                          |
-|----------------------------------------|--------------------------------|
+|-------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
 | Combines the strengths of decision trees with the ability to model numeric data                             | Not as well-known as linear regression                                              |
 | Does not require the user to specify the model in advance                                                   | Requires a large amount of training data                                            |
 | Uses automatic feature selection, which allows the approach to be used with a very large number of features | Difficult to determine the overall net effect of individual features on the outcome |
